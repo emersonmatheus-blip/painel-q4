@@ -1,0 +1,21 @@
+{
+  "name": "painel-comercial-q4",
+  "version": "1.0.0",
+  "description": "Painel Comercial Q4 da Carbone com dados do CRM Q5",
+  "scripts": {
+    "gerar": "node scripts/gerar-dados.js",
+    "teste-crm": "node src/teste-crm.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "dotenv": "^16.4.5",
+    "xlsx": "^0.18.5"
+  },
+  "private": true,
+  "engines": {
+    "node": ">=20"
+  }
+}
