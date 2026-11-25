@@ -37,8 +37,8 @@ const ABAS = ["Diário", "Calendário", "Metas", "Oportunidades"]; // "Fechament
   // Vendas do CRM: alimenta o quadro Fechamentos (só lista; os totais continuam vindo do Diário)
   const serial = (dia) => Date.parse(dia + "T00:00:00Z") / 864e5 + 25569;
   XLSX.utils.book_append_sheet(out, XLSX.utils.aoa_to_sheet([
-    ["Data", "Membro", "Empresa", "Comunidade", "Turma", "Cadeira", "Closer", "Funil", "Valor mensal", "Fidelidade (meses)", "VTV", "Observação"],
-    ...crm.vendasLista.map((v) => [serial(v.dia), v.nome, v.empresa, v.produto, "", "", v.closer, v.funil, null, v.meses, v.valor, v.etapa])
+    ["Data", "Membro", "Empresa", "Comunidade", "Turma", "Cadeira", "Closer", "Funil", "Valor mensal", "Fidelidade (meses)", "VTV", "Observação", "SDR"],
+    ...crm.vendasLista.map((v) => [serial(v.dia), v.nome, v.empresa, v.produto, "", "", v.closer, v.funil, null, v.meses, v.valor, v.etapa, v.sdr])
   ]), "Vendas CRM");
   // Pendências de preenchimento no CRM: alimenta o quadro Qualidade do CRM
   XLSX.utils.book_append_sheet(out, XLSX.utils.aoa_to_sheet([

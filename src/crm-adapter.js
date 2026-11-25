@@ -152,6 +152,8 @@ function crmToDaily({ convs, deals, users, statuses, histories, calls }) {
     add(`${grupo}|VTV ${tipo}`, dia, valor, r, origem, "VTV: valor do negócio");
     if (dia >= INICIO_Q4) vendasLista.push({
       dia, valor, funil: fv(r)["porta-de-entrada"], closer: NOME_CLOSER[fv(r).closer] || "Outros",
+      // SDR da venda segue a regra dos funis: Conselho é do Matheus, LIGA do Weslley, os demais pelo campo SDR
+      sdr: { "Experiência Conselho": "Matheus", "Convidados LIGA": "Weslley" }[fv(r)["porta-de-entrada"]] || sdrOf(r) || "Sem SDR",
       nome: fv(r)["nome-do-contratante"] || (r.c.contact && r.c.contact.name) || "",
       empresa: fv(r)["nome-empresa"] || fv(r)["razao-social"] || "", produto: produtoDe(r),
       meses: Number(fv(r)["prazo-do-contrato-meses"]) || null, etapa

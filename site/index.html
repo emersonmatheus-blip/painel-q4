@@ -196,6 +196,20 @@ table.fill td.sum .pill{font-size:.72em;padding:.15em .5em}
 .cl .s{font-size:.7em;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-variant-numeric:tabular-nums}
 .cl .share{height:.3em;background:var(--line);border-radius:999px;position:relative;overflow:hidden}
 .cl .share i{position:absolute;inset:0 auto 0 0;background:var(--gold);border-radius:999px}
+.vtvp{display:grid;grid-template-rows:minmax(0,1fr) minmax(0,1fr);gap:.8em}
+.vtvp-g{display:flex;flex-direction:column;justify-content:center;min-height:0}
+.vtvp .closers{gap:.9em}
+.vtvp .cl{gap:.3em}
+.vtvp .cl .top{font-size:.95em}
+.vtvp .cl .v{font-size:1.75em}
+.vtvp .cl .v small{display:block;font-size:.42em;margin-top:.15em}
+.vtvp .cl .s{font-size:.76em;white-space:normal}
+.vtvp .cl .f{font-size:.74em;white-space:normal}
+.vtvp .cl .share{height:.4em}
+.vtvp-h{font-size:.68em;font-weight:700;letter-spacing:.2em;text-transform:uppercase;color:var(--gold-ink);margin-bottom:.15em}
+.vtvp-h small{letter-spacing:0;text-transform:none;font-weight:500;color:var(--muted);margin-left:.4em}
+.vtvp .closers{margin-top:0;padding-top:.45em}
+.cl .f{font-size:.66em;color:var(--ink-2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 /* Funil visual */
 .fz{display:grid;gap:.25em;flex:1;grid-auto-rows:minmax(2.6em,1fr);align-content:stretch;margin-bottom:.3em}
 .fz-row{display:grid;grid-template-columns:minmax(0,.9fr) minmax(0,1.1fr);gap:.55em;align-items:center}
@@ -293,7 +307,6 @@ table.fill td.sum .pill{font-size:.72em;padding:.15em .5em}
       <h2>VTV acumulado x meta <small id="chartNote"></small></h2>
       <div class="legend"><span><i></i>Realizado</span><span><i class="dash"></i>Meta R$ 1,5 mi distribuída pelo plano</span></div>
       <div id="chart"><div class="tip" id="tip" hidden></div></div>
-      <div class="closers" id="closers" aria-label="VTV por closer"></div>
     </section>
     <section class="panel">
       <h2>Ligações dos SDRs <small id="callsNote"></small></h2>
@@ -314,9 +327,11 @@ table.fill td.sum .pill{font-size:.72em;padding:.15em .5em}
       <div class="body"><div class="people" id="people"></div></div>
     </section>
     <section class="panel">
-      <h2>Follow-ups em aberto <small id="oppNote"></small></h2>
-      <div class="counts" id="oppCounts"></div>
-      <div class="body"><ul class="opps" id="opps"></ul></div>
+      <h2>VTV por closer e SDR <small id="vtvpNote"></small></h2>
+      <div class="body vtvp">
+        <div class="vtvp-g"><div class="vtvp-h">Closers</div><div class="closers" id="closers" aria-label="VTV por closer"></div></div>
+        <div class="vtvp-g"><div class="vtvp-h">SDRs <small>quem trouxe o lead</small></div><div class="closers" id="sdrs" aria-label="VTV por SDR"></div></div>
+      </div>
     </section>
   </main>
 </div>
@@ -402,14 +417,14 @@ function buildModel(XLSX, wb, todayKey, startKey, endKey) {
   if (fws) {
     var fr = rows(XLSX, fws), fh = (fr[0] || []).map(function (h) { return norm(h).toLowerCase(); });
     function fc(prefix) { for (var i = 0; i < fh.length; i++) if (fh[i].indexOf(prefix) === 0) return i; return -1; }
-    var F = { data: fc("data"), membro: fc("membro"), empresa: fc("empresa"), comunidade: fc("comunidade"), turma: fc("turma"), cadeira: fc("cadeira"), closer: fc("closer"), funil: fc("funil"), mrr: fc("valor mensal"), meses: fc("fidelidade"), vtv: fc("vtv"), obs: fc("observ") };
+    var F = { data: fc("data"), membro: fc("membro"), empresa: fc("empresa"), comunidade: fc("comunidade"), turma: fc("turma"), cadeira: fc("cadeira"), closer: fc("closer"), funil: fc("funil"), mrr: fc("valor mensal"), meses: fc("fidelidade"), vtv: fc("vtv"), obs: fc("observ"), sdr: fc("sdr") };
     for (var fi = 1; fi < fr.length; fi++) {
       var q = fr[fi], vv = num(q[F.vtv]), dk = serialToKey(q[F.data]);
       if (!dk || (!(vv > 0) && !crmVendas)) continue;
       var cl = norm(q[F.closer]);
       fech.push({ key: dk, membro: norm(q[F.membro]), empresa: norm(q[F.empresa]), comunidade: norm(q[F.comunidade]), turma: norm(q[F.turma]), cadeira: norm(q[F.cadeira]),
         closer: cl, grupo: cl === "Josué" ? "Josué | Closer" : cl === "Thaiana" ? "Thaiana | Closer" : "Outros | Closer (Emerson e SDRs)",
-        funil: norm(q[F.funil]), mrr: num(q[F.mrr]), meses: num(q[F.meses]), vtv: vv, obs: norm(q[F.obs]) });
+        funil: norm(q[F.funil]), mrr: num(q[F.mrr]), meses: num(q[F.meses]), vtv: vv, obs: norm(q[F.obs]), sdr: F.sdr >= 0 ? norm(q[F.sdr]) : "" });
     }
   }
   var useFech = fech.length > 0 && !crmVendas;
@@ -553,6 +568,18 @@ function buildModel(XLSX, wb, todayKey, startKey, endKey) {
     };
   });
 
+  // VTV por SDR (lista de vendas do CRM, aba "Vendas CRM", coluna SDR)
+  var sdrs = null;
+  if (crmVendas && !notStarted) {
+    var sv = {}, sPer = fechIn(start, cutoff);
+    ["Weslley", "Matheus"].forEach(function (n) { sv[n] = { name: n, vtv: 0, vendas: 0, porTipo: {} }; });
+    sPer.forEach(function (f) {
+      var n = f.sdr || "Sem SDR"; sv[n] = sv[n] || { name: n, vtv: 0, vendas: 0, porTipo: {} };
+      sv[n].vtv += f.vtv; sv[n].vendas++; var t = f.funil || "Sem funil"; sv[n].porTipo[t] = (sv[n].porTipo[t] || 0) + f.vtv;
+    });
+    sdrs = Object.keys(sv).map(function (k) { var x = sv[k]; x.porTipo = Object.keys(x.porTipo).map(function (t) { return { tipo: t, vtv: x.porTipo[t] }; }); return x; });
+  } else if (crmVendas) sdrs = [];
+
   // Ligações por SDR
   var calls = ["Weslley", "Matheus"].map(function (n) {
     var fk = n + " | Ligações|Ligações realizadas", ak = n + " | Ligações|Ligações atendidas";
@@ -617,7 +644,7 @@ function buildModel(XLSX, wb, todayKey, startKey, endKey) {
     vtv: { real: vtvReal, metaHoje: vtvMetaHoje, proj: cutoff >= end ? vtvReal : vtvMetaHoje ? vtvReal / vtvMetaHoje * (series.length ? series[series.length - 1].meta : 0) : 0 },
     vendas: { real: vendas, meta: vendasMeta }, verba: { real: verba, meta: verbaMeta },
     qualidade: qualidade,
-    series: series, calls: calls, closers: closers, fechamentos: fechamentos, funnels: funnels, grid: grid, people: people, opps: opps, alerts: alerts,
+    series: series, calls: calls, closers: closers, sdrs: sdrs, fechamentos: fechamentos, funnels: funnels, grid: grid, people: people, opps: opps, alerts: alerts,
     workDaysTotal: Object.keys(calByKey).filter(function (k) { return k >= start && k <= end && isWork(k); }).length,
     workDaysElapsed: Object.keys(calByKey).filter(function (k) { return k >= start && k <= cutoff && isWork(k); }).length
   };
@@ -672,6 +699,8 @@ function render(M){
   drawChart(M);
 
   // VTV por closer
+  var CURTO = { "Experiência Carbone": "Carbone", "Exp. Carbone": "Carbone", "Experiência Conselho": "Conselho", "Exp. Conselho": "Conselho", "Convidados LIGA": "LIGA" };
+  function funisTxt(pt){ return pt.filter(function(t){ return t.vtv > 0; }).sort(function(a, b){ return b.vtv - a.vtv; }).map(function(t){ return (CURTO[t.tipo] || t.tipo) + " " + brlShort(t.vtv); }).join(" · "); }
   var totalCl = M.closers.reduce(function(s, c){ return s + c.vtv; }, 0);
   $("closers").innerHTML = M.closers.map(function(c){
     var r = c.semMeta || !c.vtvMeta ? null : c.vtv / c.vtvMeta;
@@ -681,10 +710,27 @@ function render(M){
     var det = n0(c.vendas) + (c.vendas === 1 ? " venda" : " vendas") + (c.vendas ? " · ticket " + brlShort(ticket) : "") + (totalCl ? " · " + pct(share) + " do total" : "");
     return '<div class="cl" title="' + esc(c.name + ": " + brl(c.vtv) + (tipos ? " (" + tipos + ")" : "") + (c.vtvMeta ? ", meta até hoje " + brl(c.vtvMeta) : "")) + '">' +
       '<div class="top"><b>' + esc(c.name) + "</b>" + (c.semMeta ? '<span class="pill none">sem meta</span>' : pill(r, M).replace(/No ritmo · |Atenção · |Abaixo · /, "")) + "</div>" +
-      '<div class="v">' + brlShort(c.vtv) + (c.vtvMeta ? " <small>/ " + brlShort(c.vtvMeta) + "</small>" : "") + "</div>" +
+      '<div class="v">' + brlShort(c.vtv) + (c.vtvMeta ? " <small>meta " + brlShort(c.vtvMeta) + "</small>" : "") + "</div>" +
       '<div class="s">' + det + "</div>" +
+      '<div class="f">' + (funisTxt(c.porTipo) || "&nbsp;") + "</div>" +
       '<div class="share"><i style="width:' + (share * 100) + '%"></i></div></div>';
   }).join("");
+
+  // VTV por SDR
+  $("vtvpNote").textContent = periodName(M);
+  if (!M.sdrs) $("sdrs").innerHTML = '<div class="cl"><div class="s">Precisa da aba Vendas CRM (gerada pelo robô).</div></div>';
+  else {
+    var totalS = M.sdrs.reduce(function(s, c){ return s + c.vtv; }, 0);
+    $("sdrs").innerHTML = M.sdrs.length ? M.sdrs.map(function(c){
+      var share = totalS ? c.vtv / totalS : 0, ticket = c.vendas ? c.vtv / c.vendas : 0, tipos = funisTxt(c.porTipo);
+      return '<div class="cl" title="' + esc(c.name + ": " + brl(c.vtv) + " em " + c.vendas + (c.vendas === 1 ? " venda" : " vendas") + (tipos ? " (" + tipos + ")" : "")) + '">' +
+        '<div class="top"><b>' + esc(c.name) + "</b>" + (c.name === "Sem SDR" ? '<span class="pill warn">preencher SDR</span>' : "") + "</div>" +
+        '<div class="v">' + brlShort(c.vtv) + "</div>" +
+        '<div class="s">' + n0(c.vendas) + (c.vendas === 1 ? " venda" : " vendas") + (c.vendas ? " · ticket " + brlShort(ticket) : "") + (totalS ? " · " + pct(share) + " do total" : "") + "</div>" +
+        '<div class="f">' + (tipos || "&nbsp;") + "</div>" +
+        '<div class="share"><i style="width:' + (share * 100) + '%"></i></div></div>';
+    }).join("") : '<div class="cl"><div class="s">Nenhuma venda no período.</div></div>';
+  }
 
   // Ligações
   function proj(real){ return M.cutoff >= M.end ? real : M.workDaysElapsed ? real / M.workDaysElapsed * M.workDaysTotal : 0; }
@@ -788,28 +834,6 @@ function render(M){
       "</article>";
   }).join("");
 
-  // Follow-ups
-  var counts = {};
-  M.opps.forEach(function(o){ counts[o.status || "Sem status"] = (counts[o.status || "Sem status"] || 0) + 1; });
-  $("oppCounts").innerHTML = Object.keys(counts).map(function(k){ return "<span>" + esc(k) + " <b>" + counts[k] + "</b></span>"; }).join("<span>·</span>");
-  var open = M.opps.filter(function(o){ return !/fechad|noshow/i.test(o.status); });
-  open.sort(function(a,b){ return (a.retKey || "9999") < (b.retKey || "9999") ? -1 : 1; });
-  var late = open.filter(function(o){ return o.retKey && o.retKey < M.todayKey; }).length;
-  $("oppNote").textContent = (late ? late + " atrasados · " : "") + "próximos 30 dias";
-  var limit = new Date(M.todayKey + "T12:00:00"); limit.setDate(limit.getDate() + 30);
-  var limitKey = limit.toISOString().slice(0, 10);
-  var later = open.filter(function(o){ return !o.retKey || o.retKey > limitKey; });
-  open = open.filter(function(o){ return o.retKey && o.retKey <= limitKey; });
-  $("opps").innerHTML = (open.length ? open.map(function(o){
-    var d;
-    if (!o.retKey) d = '<span class="pill none">sem data</span>';
-    else if (o.retKey < M.todayKey) d = '<span class="pill crit">' + lbl(o.retKey) + "</span>";
-    else if (o.retKey === M.todayKey) d = '<span class="pill warn">hoje</span>';
-    else d = lbl(o.retKey) + (o.retKey.slice(0,4) !== M.todayKey.slice(0,4) ? "/" + o.retKey.slice(2,4) : "");
-    return '<li><span class="d">' + d + '</span><span class="who"><b>' + esc(o.name) + "</b><span>" + esc(o.closer || "sem responsável") + '</span></span><span class="obs" title="' + esc(o.note) + '">' + esc(o.status + " · " + o.note) + "</span></li>";
-  }).join("") : "<li><span></span><span>Nenhum retorno nos próximos 30 dias.</span></li>") +
-    (later.length ? '<li class="more"><span class="d"></span><span class="obs" style="grid-column:2" title="' + esc(later.map(function(o){ return o.name + (o.retKey ? " (" + lbl(o.retKey) + ")" : " (sem data)"); }).join(", ")) + '">+ ' + later.length + " sem data ou com retorno depois de " + lbl(limitKey) + ": " + esc(later.map(function(o){ return o.name.split(" ")[0]; }).join(", ")) + "</span></li>" : "");
-  fitList($("opps"), "retornos");
 }
 
 // Em tela fixa, corta a lista no que cabe e resume o resto numa linha
