@@ -1,0 +1,72 @@
+# Robô do Painel Comercial Q4
+# Lê o CRM Q5 + planilha publicada, gera site/dados.xlsx e publica o painel no GitHub Pages.
+# Horários (Fortaleza):
+#   seg a sex, 7h às 18h50: a cada 10 min
+#   seg a sex, 19h às 20h30: a cada 30 min
+#   sábado, 7h às 20h30: a cada 30 min
+# Repositório público: minutos de robô ilimitados e GitHub Pages grátis.
+# As senhas ficam em Settings > Secrets (ninguém de fora consegue ver).
+# Também dá para rodar na hora: aba Actions > Atualizar painel > Run workflow.
+name: Atualizar painel
+
+on:
+  schedule:                          # horário UTC (Fortaleza = UTC-3)
+    - cron: "*/10 10-21 * * 1-5"
+    - cron: "*/30 22-23 * * 1-5"
+    - cron: "*/30 10-23 * * 6"
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: atualizar-painel
+  cancel-in-progress: false
+
+jobs:
+  atualizar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment:
+      name: github-pages
+      url: ${{ steps.publicar.outputs.page_url }}
+    env:
+      TZ: America/Fortaleza
+      Q5_API_KEY: ${{ secrets.Q5_API_KEY }}
+      Q5_EMAIL: ${{ secrets.Q5_EMAIL }}
+      Q5_PASSWORD: ${{ secrets.Q5_PASSWORD }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - run: npm ci
+
+      # Guarda entre uma rodada e outra o que já foi lido do CRM (deixa a leitura rápida)
+      - uses: actions/cache@v4
+        with:
+          path: .cache
+          key: q5-cache-${{ github.run_id }}
+          restore-keys: q5-cache-
+
+      - name: Gerar dados.xlsx com o CRM
+        run: node scripts/gerar-dados.js
+
+      - name: Preparar site
+        run: |
+          touch site/.nojekyll
+          printf 'User-agent: *\nDisallow: /\n' > site/robots.txt
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+          retention-days: 1
+
+      - name: Publicar no GitHub Pages
+        id: publicar
+        uses: actions/deploy-pages@v4
