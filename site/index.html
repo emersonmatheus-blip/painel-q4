@@ -574,7 +574,7 @@ function buildModel(XLSX, wb, todayKey, startKey, endKey) {
     var sv = {}, sPer = fechIn(start, cutoff);
     ["Weslley", "Matheus"].forEach(function (n) { sv[n] = { name: n, vtv: 0, vendas: 0, porTipo: {} }; });
     sPer.forEach(function (f) {
-      var n = f.sdr || "Sem SDR"; sv[n] = sv[n] || { name: n, vtv: 0, vendas: 0, porTipo: {} };
+      var n = f.sdr || "Outros"; sv[n] = sv[n] || { name: n, vtv: 0, vendas: 0, porTipo: {} };
       sv[n].vtv += f.vtv; sv[n].vendas++; var t = f.funil || "Sem funil"; sv[n].porTipo[t] = (sv[n].porTipo[t] || 0) + f.vtv;
     });
     sdrs = Object.keys(sv).map(function (k) { var x = sv[k]; x.porTipo = Object.keys(x.porTipo).map(function (t) { return { tipo: t, vtv: x.porTipo[t] }; }); return x; });
@@ -724,7 +724,7 @@ function render(M){
     $("sdrs").innerHTML = M.sdrs.length ? M.sdrs.map(function(c){
       var share = totalS ? c.vtv / totalS : 0, ticket = c.vendas ? c.vtv / c.vendas : 0, tipos = funisTxt(c.porTipo);
       return '<div class="cl" title="' + esc(c.name + ": " + brl(c.vtv) + " em " + c.vendas + (c.vendas === 1 ? " venda" : " vendas") + (tipos ? " (" + tipos + ")" : "")) + '">' +
-        '<div class="top"><b>' + esc(c.name) + "</b>" + (c.name === "Sem SDR" ? '<span class="pill warn">preencher SDR</span>' : "") + "</div>" +
+        '<div class="top"><b>' + esc(c.name) + "</b>" + (c.name === "Outros" ? '<span class="pill none">SDR vazio</span>' : "") + "</div>" +
         '<div class="v">' + brlShort(c.vtv) + "</div>" +
         '<div class="s">' + n0(c.vendas) + (c.vendas === 1 ? " venda" : " vendas") + (c.vendas ? " · ticket " + brlShort(ticket) : "") + (totalS ? " · " + pct(share) + " do total" : "") + "</div>" +
         '<div class="f">' + (tipos || "&nbsp;") + "</div>" +
