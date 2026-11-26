@@ -20,6 +20,9 @@ function diasEntre(a, b) {
 }
 
 // Ligações por dia e SDR. Dias passados ficam em cache; hoje é sempre relido.
+// Negócio com marcação de anúncio (UTM ou Tipo_lead = Ads): entra no funil Exp. Carbone mesmo sem porta
+function ehAdsDeal(d) { const f = (d && d.field_values) || {}; return !!(f["utm-source"] || f["utm-campaign"] || f["tipo-lead"] === "Ads"); }
+
 async function lerLigacoes(q5, users, primeiroDia, hoje) {
   let cache = {};
   try { cache = JSON.parse(fs.readFileSync(CALLS_CACHE, "utf8")); } catch {}
@@ -70,7 +73,7 @@ async function preencherComCrm(XLSX, wb, { hoje = hojeFortaleza(), force = false
     try {
       statuses = await q5.chatStatuses();
       // Histórico só dos negócios que entram na conta (com porta de entrada ou ganhos)
-      const relevantes = convs.filter((c) => deals[c.id] && ((deals[c.id].field_values || {})["porta-de-entrada"] || deals[c.id].status === "won"));
+      const relevantes = convs.filter((c) => deals[c.id] && ((deals[c.id].field_values || {})["porta-de-entrada"] || deals[c.id].status === "won" || ehAdsDeal(deals[c.id])));
       histories = await q5.stageHistories(relevantes);
     } catch (e) { M_avisos.push({ level: "warning", text: `Histórico de etapas não lido (${e.message}); usando etapa atual e campos de data.` }); }
     try { calls = await lerLigacoes(q5, users, "2026-09-29", hoje); }

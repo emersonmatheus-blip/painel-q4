@@ -76,7 +76,13 @@ function crmToDaily({ convs, deals, users, statuses, histories, calls }) {
 
   const rows = convs.map((c) => ({ c, d: deals[c.id], h: (histories && histories[c.id]) || [] })).filter((r) => r.d);
   const fv = (r) => r.d.field_values || {};
-  const sdrOf = (r) => SDR[fv(r).sdr] || SDR[userName[r.d.owner_user_id]] || null;
+  const sdrOf = (r) => SDR[fv(r).sdr] || SDR[userName[r.d.owner_user_id]] || SDR[userName[r.c.assignedAgentUserId]] || null;
+  // Tráfego pela UTM (decisão do Emerson, 26/11/2026): lead com UTM ou Tipo_lead = Ads e sem Porta de entrada
+  // entra no funil Experiência Carbone. Porta preenchida continua valendo. "Chat Interno" fica de fora (duplicadas/internas).
+  const ehAds = (r) => !!(fv(r)["utm-source"] || fv(r)["utm-campaign"] || fv(r)["tipo-lead"] === "Ads");
+  const chatInterno = (r) => /chat interno/i.test(nomeEtapa[r.c.status] || r.c.status || "");
+  const viaUtm = (r) => !fv(r)["porta-de-entrada"] && ehAds(r) && !chatInterno(r);
+  const portaDe = (r) => fv(r)["porta-de-entrada"] || (viaUtm(r) ? "Experiência Carbone" : null);
   const contato = (r) => (r.c.contact && (r.c.contact.phoneE164 || r.c.contact.id)) || r.d.contact_id;
 
   // Quando o negócio chegou pela primeira vez a uma etapa de ordem >= a da etapa alvo.
@@ -98,7 +104,7 @@ function crmToDaily({ convs, deals, users, statuses, histories, calls }) {
   }
 
   // Duplicados: o mesmo contato pode ter um negócio por WhatsApp de SDR. Fica só a última entrada.
-  const comPorta = rows.filter((r) => fv(r)["porta-de-entrada"]);
+  const comPorta = rows.filter((r) => portaDe(r));
   const ultimo = new Map();
   for (const r of comPorta) {
     const k = contato(r), prev = ultimo.get(k);
@@ -110,11 +116,11 @@ function crmToDaily({ convs, deals, users, statuses, histories, calls }) {
   let semSdr = 0;
   const outrosPorta = [];
   for (const r of validos) {
-    const porta = fv(r)["porta-de-entrada"], sdr = sdrOf(r);
+    const porta = portaDe(r), sdr = sdrOf(r);
     if (!PORTA_VENDA[porta]) { outrosPorta.push(r); continue; }
     if (porta === "Experiência Carbone" && !sdr) { if (dayKey(r.d.opened_at) >= INICIO_Q4) semSdr++; continue; }
 
-    add(funilKey(porta, sdr, "lead"), dayKey(r.d.opened_at), 1, r, `negócio criado em ${r.d.opened_at}`, "Lead: negócio com Porta de entrada (última entrada do contato)");
+    add(funilKey(porta, sdr, "lead"), dayKey(r.d.opened_at), 1, r, `negócio criado em ${r.d.opened_at}`, viaUtm(r) ? "Lead: sem porta, com UTM de anúncio → Exp. Carbone (última entrada do contato)" : "Lead: negócio com Porta de entrada (última entrada do contato)");
 
     // Agendamento: chegou em Experiência agendada ou em qualquer etapa depois dela, inclusive quem foi direto
     // para Reunião agendada para Closer. Não exige Data da reunião (decisão do Emerson, 18/11/2026).
@@ -141,7 +147,7 @@ function crmToDaily({ convs, deals, users, statuses, histories, calls }) {
   const NOME_CLOSER = { "Josue Oliveira": "Josué", "Thaiana Dias": "Thaiana" };
   const produtoDe = (r) => fv(r).produto || ((r.d.products || []).map((p) => p.name || p.product_name || (p.product && p.product.name)).filter(Boolean)[0]) || "";
   for (const r of rows.filter((x) => x.d.status === "won" || REGRAS.etapasVenda.includes(x.c.status))) {
-    const tipo = PORTA_VENDA[fv(r)["porta-de-entrada"]];
+    const tipo = PORTA_VENDA[portaDe(r)];
     const valor = (r.d.value_cents || 0) / 100, { dia, origem: quando } = dataVenda(r);
     if (!tipo) { if (dia >= INICIO_Q4) vendasSemPorta.push({ valor, dia }); continue; }
     const grupo = CLOSER[fv(r).closer] || CLOSER_OUTROS;
@@ -151,7 +157,7 @@ function crmToDaily({ convs, deals, users, statuses, histories, calls }) {
     add(`${grupo}|Vendas ${tipo}`, dia, 1, r, origem, `Venda: ${etapa}`);
     add(`${grupo}|VTV ${tipo}`, dia, valor, r, origem, "VTV: valor do negócio");
     if (dia >= INICIO_Q4) vendasLista.push({
-      dia, valor, funil: fv(r)["porta-de-entrada"], closer: NOME_CLOSER[fv(r).closer] || "Outros",
+      dia, valor, funil: portaDe(r), closer: NOME_CLOSER[fv(r).closer] || "Outros",
       // SDR da venda = campo SDR do negócio (decisão do Emerson, 26/11/2026); vazio vira "Outros"
       sdr: SDR[fv(r).sdr] || (fv(r).sdr ? String(fv(r).sdr).trim().split(" ")[0] : "Outros"),
       nome: fv(r)["nome-do-contratante"] || (r.c.contact && r.c.contact.name) || "",
@@ -194,7 +200,7 @@ function crmToDaily({ convs, deals, users, statuses, histories, calls }) {
   return {
     daily, keys, avisos, auditoria, vendasLista, qualidade,
     resumo: {
-      conversas: convs.length, negocios: rows.length, comPorta: comPorta.length, duplicadosDescartados: duplicados.length,
+      conversas: convs.length, negocios: rows.length, comPorta: comPorta.length, viaUtm: validos.filter(viaUtm).length, duplicadosDescartados: duplicados.length,
       portaOutros: outrosPorta.length, semSdr, assinadoAntigo: antigos.length, comHistorico: rows.filter((r) => r.h.length).length
     }
   };

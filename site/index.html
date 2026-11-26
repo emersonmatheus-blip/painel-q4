@@ -210,6 +210,18 @@ table.fill td.sum .pill{font-size:.72em;padding:.15em .5em}
 .vtvp-h small{letter-spacing:0;text-transform:none;font-weight:500;color:var(--muted);margin-left:.4em}
 .vtvp .closers{margin-top:0;padding-top:.45em}
 .cl .f{font-size:.66em;color:var(--ink-2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+/* Tráfego */
+.tf{overflow:hidden;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));grid-template-rows:repeat(2,minmax(0,1fr));gap:.7em}
+.tf-c{border:1px solid var(--line);background:var(--bg);border-radius:10px;padding:.7em .9em;min-width:0;display:flex;flex-direction:column;justify-content:space-between;gap:.25em}
+.tf-c .l{display:flex;justify-content:space-between;align-items:center;gap:6px;font-size:.66em;font-weight:600;letter-spacing:.2em;text-transform:uppercase;color:var(--gold-ink)}
+.tf-c .l .pill{font-size:1.05em;letter-spacing:0;text-transform:none;padding:.05em .55em}
+.tf-c .v{font-family:var(--head);font-weight:800;letter-spacing:-.035em;font-size:2.1em;line-height:1.05;font-variant-numeric:tabular-nums;white-space:nowrap}
+.tf-c .v small{font-size:.45em;font-weight:500;color:var(--muted);letter-spacing:0}
+.tf-c .m{font-size:.78em;color:var(--ink-2);font-variant-numeric:tabular-nums}
+.tf-c .s{font-size:.72em;color:var(--muted);font-variant-numeric:tabular-nums;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tf-c .bar{height:.4em}
+.tf-foot{display:flex;flex-wrap:wrap;gap:.2em 1.2em;font-size:.74em;color:var(--muted);margin-top:.6em;padding-top:.5em;border-top:1px solid var(--line);font-variant-numeric:tabular-nums}
+.tf-foot b{color:var(--ink);font-weight:600}
 /* Funil visual */
 .fz{display:grid;gap:.25em;flex:1;grid-auto-rows:minmax(2.6em,1fr);align-content:stretch;margin-bottom:.3em}
 .fz-row{display:grid;grid-template-columns:minmax(0,.9fr) minmax(0,1.1fr);gap:.55em;align-items:center}
@@ -309,8 +321,9 @@ table.fill td.sum .pill{font-size:.72em;padding:.15em .5em}
       <div id="chart"><div class="tip" id="tip" hidden></div></div>
     </section>
     <section class="panel">
-      <h2>Ligações dos SDRs <small id="callsNote"></small></h2>
-      <div class="body" id="calls"></div>
+      <h2>Tráfego · Exp. Carbone <small id="trafNote"></small></h2>
+      <div class="body tf" id="traf"></div>
+      <div class="tf-foot" id="trafFoot"></div>
     </section>
     <section class="panel">
       <h2>Fechamentos <small id="fechNote"></small></h2>
@@ -503,6 +516,17 @@ function buildModel(XLSX, wb, todayKey, startKey, endKey) {
     ], vtv: stage("VTV", closerKeys("VTV Outros"), closerKeys("VTV Outros", JT)) }
   ];
 
+  // Tráfego = funil Exp. Carbone (no plano comercial as metas "T" são de tráfego)
+  var fT = funnels[0], tLeads = fT.stages[0], tVendas = fT.stages[3], tVtv = fT.vtv;
+  var trafego = {
+    leads: { real: tLeads.real, meta: tLeads.meta, metaPer: sumKeys(metaP, ["Weslley | Experiência Carbone|Leads", "Matheus | Experiência Carbone|Leads"]) },
+    vendas: { real: tVendas.real, meta: tVendas.meta },
+    vtv: { real: tVtv.real, meta: tVtv.meta },
+    verba: { real: verba, meta: verbaMeta },
+    conv: { real: tLeads.real ? tVendas.real / tLeads.real : null, premissa: tLeads.meta ? tVendas.meta / tLeads.meta : null },
+    roas: { real: verba ? tVtv.real / verba : null, meta: verbaMeta ? tVtv.meta / verbaMeta : null }
+  };
+
   // Lançamentos por pessoa e dia
   var grid = PEOPLE.map(function (p) {
     var pc = [];
@@ -644,7 +668,7 @@ function buildModel(XLSX, wb, todayKey, startKey, endKey) {
     vtv: { real: vtvReal, metaHoje: vtvMetaHoje, proj: cutoff >= end ? vtvReal : vtvMetaHoje ? vtvReal / vtvMetaHoje * (series.length ? series[series.length - 1].meta : 0) : 0 },
     vendas: { real: vendas, meta: vendasMeta }, verba: { real: verba, meta: verbaMeta },
     qualidade: qualidade,
-    series: series, calls: calls, closers: closers, sdrs: sdrs, fechamentos: fechamentos, funnels: funnels, grid: grid, people: people, opps: opps, alerts: alerts,
+    series: series, calls: calls, trafego: trafego, closers: closers, sdrs: sdrs, fechamentos: fechamentos, funnels: funnels, grid: grid, people: people, opps: opps, alerts: alerts,
     workDaysTotal: Object.keys(calByKey).filter(function (k) { return k >= start && k <= end && isWork(k); }).length,
     workDaysElapsed: Object.keys(calByKey).filter(function (k) { return k >= start && k <= cutoff && isWork(k); }).length
   };
@@ -656,7 +680,7 @@ function buildModel(XLSX, wb, todayKey, startKey, endKey) {
 // Link da planilha em Arquivo > Compartilhar > Publicar na Web > Documento inteiro > Microsoft Excel (.xlsx)
 var SHEET_URL = "dados.xlsx"; // gerado a cada 10 min pelo robô (scripts/gerar-dados.js) com os dados do CRM Q5
 var PREMISSAS = { "Experiência Carbone": [0.27, 0.70, 0.43], "Experiência Conselho": [0.5, 0.6, 0.25], "Convidados LIGA": [0.6, 0.5, 0.2] };
-var PICK = { "Weslley": [0, 1, 2, 4], "Matheus": [0, 1, 3, 4] };
+var PICK = { "Weslley": [1, 2, 4], "Matheus": [1, 3, 4] }; // sem a linha de Leads (pedido do Emerson, 26/11)
 var $ = function(id){ return document.getElementById(id); };
 function esc(s){ return String(s).replace(/[&<>"]/g, function(c){ return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]; }); }
 function brl(v){ return "R$ " + Math.round(v).toLocaleString("pt-BR"); }
@@ -732,31 +756,44 @@ function render(M){
     }).join("") : '<div class="cl"><div class="s">Nenhuma venda no período.</div></div>';
   }
 
-  // Ligações
-  function proj(real){ return M.cutoff >= M.end ? real : M.workDaysElapsed ? real / M.workDaysElapsed * M.workDaysTotal : 0; }
-  var anyMeta = M.calls.some(function(c){ return c.feitas.metaPer > 0 || c.atend.metaPer > 0; });
-  $("callsNote").textContent = anyMeta ? "real / meta até hoje" : "sem meta: preencha W_lig e M_lig na aba Metas";
-  function metric(label, o){
-    var hasMeta = o.metaPer > 0, p = proj(o.real);
-    var r = hasMeta && o.meta > 0 ? o.real / o.meta : null;
-    var bmax = Math.max(o.real, o.meta || 0, 1);
-    return '<div class="cm"><div class="row"><span class="n">' + label + '</span><span class="val"><b>' + n0(o.real) + "</b>" + (hasMeta ? "<span> / " + n0(o.meta) + "</span>" : "") + "</span></div>" +
-      (hasMeta ? '<div class="bar"><span class="r" style="width:' + (o.real / bmax * 100) + '%"></span><span class="t" style="left:calc(' + (o.meta / bmax * 100) + '% - 1px)"></span></div>' : "") +
-      '<div class="proj"><span>projeção ' + (M.notStarted ? "sem base" : n0(p)) + (hasMeta ? " · meta " + n0(o.metaPer) : "") + "</span>" + (hasMeta ? pill(o.metaPer ? p / o.metaPer : null, M).replace(/No ritmo · |Atenção · |Abaixo · /, "") : '<span class="pill none">sem meta</span>') + "</div></div>";
+  // Tráfego (funil Exp. Carbone)
+  var T = M.trafego;
+  function ratioOf(r, m){ return m ? r / m : null; }
+  function tile(label, valor, pillHtml, meta, sub, barra){
+    return '<div class="tf-c"><div class="l"><span>' + label + "</span>" + pillHtml + '</div><div class="v">' + valor + '</div>' +
+      (barra ? barra : "") + '<div class="m">' + meta + '</div><div class="s">' + sub + "</div></div>";
   }
-  $("calls").innerHTML = M.calls.map(function(c){
-    var taxa = c.feitas.real ? c.atend.real / c.feitas.real : null;
-    var mx = Math.max.apply(null, c.daily.map(function(x){ return x.f; }).concat([1]));
-    var bars = c.daily.map(function(x){
-      var miss = !x.filled && !x.today;
-      var t = lbl(x.key) + ": " + (x.filled ? n0(x.f) + " feitas, " + n0(x.a) + " atendidas" : x.today ? "hoje, sem lançamento" : "sem lançamento");
-      return '<span class="col' + (miss ? " empty" : "") + (x.today ? " today" : "") + '" style="height:' + (x.f / mx * 100) + '%" title="' + esc(t) + '"><i style="height:' + (x.f ? x.a / x.f * 100 : 0) + '%"></i></span>';
-    }).join("");
-    var days = c.daily.map(function(x){ return "<span>" + x.key.slice(8) + "</span>"; }).join("");
-    return '<div class="cb"><div class="hd"><b>' + esc(c.name) + "</b>" + (taxa === null ? '<span class="pill none">sem ligações</span>' : '<span class="pill none" style="color:var(--gold-ink)">' + pct(taxa) + " atendem</span>") + "</div>" +
-      "<div>" + metric("Feitas", c.feitas) + metric("Atendidas", c.atend) + "</div>" +
-      '<div class="spark"><div class="bars">' + (bars || "") + '</div><div class="days">' + days + '</div><div class="lg"><span><i style="background:var(--fill-soft)"></i>feitas</span><span><i style="background:var(--gold)"></i>atendidas</span></div></div></div>';
-  }).join("");
+  function barra(real, meta){
+    if (!(meta > 0)) return "";
+    var mx = Math.max(real, meta, 1);
+    return '<div class="bar"><span class="r" style="width:' + (real / mx * 100) + '%"></span><span class="t" style="left:calc(' + (meta / mx * 100) + '% - 1px)"></span></div>';
+  }
+  function curto(p){ return p.replace(/No ritmo · |Atenção · |Abaixo · /, ""); }
+  function fmtX(v){ return v === null ? "–" : v.toLocaleString("pt-BR", { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + "x"; }
+  function pct1(v){ return v === null ? "–" : (v * 100).toLocaleString("pt-BR", { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + "%"; }
+  var cpl = T.leads.real ? T.verba.real / T.leads.real : null, cpv = T.vendas.real ? T.verba.real / T.vendas.real : null;
+  var tkt = T.vendas.real ? T.vtv.real / T.vendas.real : null;
+  $("trafNote").textContent = "real / meta até hoje";
+  $("traf").innerHTML =
+    tile("Leads gerados", n0(T.leads.real),
+      curto(pill(ratioOf(T.leads.real, T.leads.meta), M)),
+      T.leads.meta ? "meta até hoje " + n0(T.leads.meta) + " · período " + n0(T.leads.metaPer) : "sem meta",
+      "CPL " + (cpl === null ? "–" : brl(cpl)), barra(T.leads.real, T.leads.meta)) +
+    tile("VTV do tráfego", brlShort(T.vtv.real),
+      curto(pill(ratioOf(T.vtv.real, T.vtv.meta), M)),
+      T.vtv.meta ? "meta até hoje " + brlShort(T.vtv.meta) : "sem meta",
+      n0(T.vendas.real) + (T.vendas.real === 1 ? " venda" : " vendas") + " de " + n0(T.vendas.meta) + " previstas" + (tkt ? " · ticket " + brlShort(tkt) : ""), barra(T.vtv.real, T.vtv.meta)) +
+    tile("Taxa de conversão", pct1(T.conv.real),
+      curto(pill(T.conv.real !== null && T.conv.premissa ? T.conv.real / T.conv.premissa : null, M)),
+      "premissa do plano " + pct1(T.conv.premissa),
+      "lead → venda · " + n0(T.vendas.real) + " vendas de " + n0(T.leads.real) + " leads") +
+    tile("ROAS", fmtX(T.roas.real),
+      curto(pill(T.roas.real !== null && T.roas.meta ? T.roas.real / T.roas.meta : null, M)),
+      "meta " + fmtX(T.roas.meta) + " (VTV meta ÷ verba meta)",
+      "VTV ÷ verba de tráfego");
+  $("trafFoot").innerHTML = "<span>Verba <b>" + brlShort(T.verba.real) + "</b> de " + brlShort(T.verba.meta) + " previstos</span>" +
+    "<span>Custo por venda <b>" + (cpv === null ? "–" : brlShort(cpv)) + "</b></span>" +
+    "<span>Leads = porta Exp. Carbone ou UTM de anúncio no CRM</span>";
 
   // Fechamentos
   var FC = M.fechamentos;
