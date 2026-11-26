@@ -51,6 +51,8 @@ const ABAS = ["Diário", "Calendário", "Metas", "Oportunidades"]; // "Fechament
   // Versão da página: o painel aberto na TV compara e se recarrega quando muda
   const versao = require("crypto").createHash("sha1").update(fs.readFileSync(path.join(path.dirname(SAIDA), "index.html"))).digest("hex").slice(0, 12);
   fs.writeFileSync(path.join(path.dirname(SAIDA), "versao.txt"), versao);
+  // Hora em que estes dados saíram do CRM: o botão Atualizar espera este arquivo mudar
+  fs.writeFileSync(path.join(path.dirname(SAIDA), "status.json"), JSON.stringify({ gerado: new Date().toISOString() }));
 
   console.log(`dados.xlsx gerado em ${((Date.now() - t) / 1000).toFixed(0)} s · hoje ${hoje} · ${JSON.stringify(crm.resumo)}`);
   avisos.forEach((a) => console.log(`[${a.level}] ${a.text}`));

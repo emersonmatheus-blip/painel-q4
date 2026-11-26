@@ -949,7 +949,7 @@ function handleResult(buf){
   try {
     lastWb = XLSX.read(buf, { type: "array" });
     recompute();
-    $("sync").textContent = "Lida " + hhmm(Date.now()) + " · próxima " + hhmm(lastLoad + EVERY);
+    syncText();
   } catch (e) {
     showState("Li o arquivo, mas a estrutura das abas mudou e não consegui interpretar. Verifique se as abas Diário, Calendário, Metas e Oportunidades mantêm os mesmos cabeçalhos.<br><small>" + esc(e.message || e) + "</small>");
   }
@@ -971,16 +971,51 @@ function checkVersion(){
     .then(function(v){ v = v && v.trim(); if (!v) return; if (pageVersion === null) pageVersion = v; else if (v !== pageVersion) location.reload(); })
     .catch(function(){});
 }
+// Hora em que o robô tirou os dados do CRM (status.json) e endereço do pedido de atualização (config.json)
+var dataGerado = null, atualizarUrl = "", pedindo = null;
+function lerStatus(){
+  return fetch("status.json?t=" + Date.now(), { cache: "no-store" })
+    .then(function(r){ return r.ok ? r.json() : null; })
+    .then(function(j){ return j && j.gerado || null; })
+    .catch(function(){ return null; });
+}
+fetch("config.json?t=" + Date.now(), { cache: "no-store" })
+  .then(function(r){ return r.ok ? r.json() : null; })
+  .then(function(j){ atualizarUrl = (j && j.atualizarUrl || "").trim(); })
+  .catch(function(){});
+function syncText(){
+  if (pedindo) return;
+  $("sync").textContent = (dataGerado ? "Dados do CRM de " + hhmm(Date.parse(dataGerado)) : "Lida " + hhmm(lastLoad)) + " · próxima leitura " + hhmm(lastLoad + EVERY);
+}
+// Botão Atualizar: pede ao robô uma rodada agora e espera os dados novos chegarem
+function pedirAtualizacao(){
+  if (!atualizarUrl) { load(); return; }
+  if (pedindo) return;
+  var antes = dataGerado, inicio = Date.now();
+  pedindo = true;
+  $("refresh").disabled = true;
+  $("sync").textContent = "Pedindo dados novos ao CRM… leva uns 3 min";
+  fetch(atualizarUrl + (atualizarUrl.indexOf("?") < 0 ? "?" : "&") + "t=" + inicio, { redirect: "follow" }).catch(function(){});
+  var timer = setInterval(function(){
+    var min = Math.floor((Date.now() - inicio) / 60000), seg = Math.floor((Date.now() - inicio) / 1000) % 60;
+    lerStatus().then(function(g){
+      if (g && g !== antes) { clearInterval(timer); pedindo = null; $("refresh").disabled = false; load(); return; }
+      if (Date.now() - inicio > 8 * 60000) { clearInterval(timer); pedindo = null; $("refresh").disabled = false; load(); return; }
+      $("sync").textContent = "Buscando no CRM… " + min + ":" + (seg < 10 ? "0" : "") + seg + " (leva uns 3 min)";
+    });
+  }, 15000);
+}
 function load(){
   checkVersion();
+  lerStatus().then(function(g){ if (g) { dataGerado = g; syncText(); } });
   lastLoad = Date.now();
-  $("sync").textContent = "Lendo a planilha…";
+  if (!pedindo) $("sync").textContent = "Lendo os dados…";
   // O parâmetro t evita que o navegador reaproveite uma cópia antiga
   fetch(SHEET_URL + (SHEET_URL.indexOf("?") < 0 ? "?" : "&") + "t=" + lastLoad, { cache: "no-store" })
     .then(function(r){ if (!r.ok) throw new Error("HTTP " + r.status); return r.arrayBuffer(); })
     .then(handleResult, handleError);
 }
-$("refresh").addEventListener("click", function(){ load(); });
+$("refresh").addEventListener("click", pedirAtualizacao);
 var fsBtn = $("fs");
 fsBtn.addEventListener("click", function(){
   var doc = document;
